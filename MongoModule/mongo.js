@@ -37,7 +37,7 @@ async function saveLogs(logEntry) {
         await collection.insertOne(logEntry);
     } catch (err) {
         console.error('Failed to save logs', err);
-        throw err; 
+        throw err;
     }
 }
 
@@ -48,7 +48,7 @@ async function getLogs() {
         return await collection.find({}).toArray();
     } catch (err) {
         console.error('Failed to get logs', err);
-        throw err; 
+        throw err;
     }
 }
 
@@ -57,6 +57,6 @@ module.exports = {
     connectionToMongoDB,
     saveErrorLogs,
     saveInfoLogs,
-    getLogs, 
-    
+    getLogs,
+
 };
