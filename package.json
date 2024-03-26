@@ -1,7 +1,7 @@
 {
   "name": "errsole-mongodb",
   "version": "0.0.1",
-  "description": "A MongoDB logging module for Node.js applications that automatically captures all logs",
+  "description": "A MongoDB logging module for errsole",
   "main": "lib/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
