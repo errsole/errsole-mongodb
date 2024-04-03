@@ -20,5 +20,5 @@ In your main application file, initialize the errsole-mongodb module with the Mo
 ```javascript
 const errsoleMongoDB = require('errsole-mongodb');
 
-const storage = new errsoleMongoDB(mongodb_url, database_name)
+const storage = new errsoleMongoDB(mongodb_url, database_name, options)
 ```
