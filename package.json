@@ -13,8 +13,8 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "mongodb": "^6.4.0",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "mongodb": "^6.4.0"
   },
   "files": [
     "lib/index.js"
