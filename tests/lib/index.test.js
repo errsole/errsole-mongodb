@@ -33,6 +33,7 @@ describe('ErrsoleMongoDB', () => {
       expect(result.item).toHaveProperty('role', user.role);
     });
   });
+
   describe('#verifyUser', () => {
     it('should verify a user', async () => {
       const user = {
@@ -90,12 +91,27 @@ describe('ErrsoleMongoDB', () => {
       return result.item;
     });
   });
+
   describe('#updateUserByEmail', () => {
     it('should update a user by email', async () => {
       const email = 'peter@gmail.com';
       const updates = { name: 'Peter smith' };
       const result = await errsoleMongoDB.updateUserByEmail(email, updates);
       return result.item;
+    });
+  });
+
+  describe('#updatePassword', () => {
+    it('should update a user password successfully', async () => {
+      const email = 'peter@gmail.com';
+      const currentPassword = 'password123';
+      const newPassword = 'peter123';
+
+      const result = await errsoleMongoDB.updatePassword(email, currentPassword, newPassword);
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('item');
+      expect(result.item).toMatchObject({ email: 'peter@gmail.com' });
     });
   });
 });
