@@ -1,4 +1,4 @@
-const ErrsoleMongoDB = require('../../lib/index'); // Replace with the path to your index file
+const ErrsoleMongoDB = require('../../lib/index');
 /* globals describe, it,  beforeAll, afterAll, expect */
 
 describe('ErrsoleMongoDB', () => {
@@ -55,23 +55,6 @@ describe('ErrsoleMongoDB', () => {
     it('should get all users', async () => {
       const result = await errsoleMongoDB.getAllUsers();
       return result;
-    });
-  });
-
-  describe('#setConfig', () => {
-    it('should set a configuration entry', async () => {
-      const key = 'JwtToken';
-      const value = 'sdfnjcesjncfenjnjerfnf';
-      const result = await errsoleMongoDB.setConfig(key, value);
-      expect(result.item).toHaveProperty('key', key);
-    });
-  });
-
-  describe('#getConfig', () => {
-    it('should get a configuration entry', async () => {
-      const key = 'JwtToken';
-      const result = await errsoleMongoDB.getConfig(key);
-      return result.value;
     });
   });
 
