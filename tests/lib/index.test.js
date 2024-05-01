@@ -151,4 +151,55 @@ describe('ErrsoleMongoDB', () => {
       expect(result.item).toMatchObject({ email: 'peter@gmail.com' });
     });
   });
+
+  describe('#getLogs', () => {
+    // Retrieves log entries with default limit and no filters.
+    it('should retrieve log entries with default limit and no filters', async () => {
+      const collectionMock = {
+        find: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        toArray: jest.fn().mockResolvedValue([])
+      };
+      const dbMock = {
+        collection: jest.fn().mockReturnValue(collectionMock)
+      };
+      errsoleMongoDB.db = dbMock;
+
+      const result = await errsoleMongoDB.getLogs();
+
+      // Assertions
+      expect(errsoleMongoDB.db.collection).toHaveBeenCalledWith(errsoleMongoDB.logsCollectionName);
+      expect(collectionMock.find).toHaveBeenCalledWith({});
+      expect(collectionMock.sort).toHaveBeenCalledWith({ _id: -1 });
+      expect(collectionMock.limit).toHaveBeenCalledWith(100);
+      expect(collectionMock.toArray).toHaveBeenCalled();
+      expect(result).toEqual({ items: [] });
+    });
+
+    // Retrieves log entries with limit set to 0.
+    it('should retrieve log entries with limit set to 100', async () => {
+      const collectionMock = {
+        find: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        toArray: jest.fn().mockResolvedValue([])
+      };
+      const dbMock = {
+        collection: jest.fn().mockReturnValue(collectionMock)
+      };
+      errsoleMongoDB.db = dbMock;
+
+      const filters = { limit: 0 };
+      const result = await errsoleMongoDB.getLogs(filters);
+
+      // Assertions
+      expect(errsoleMongoDB.db.collection).toHaveBeenCalledWith(errsoleMongoDB.logsCollectionName);
+      expect(collectionMock.find).toHaveBeenCalledWith({});
+      expect(collectionMock.sort).toHaveBeenCalledWith({ _id: -1 });
+      expect(collectionMock.limit).toHaveBeenCalledWith(100);
+      expect(collectionMock.toArray).toHaveBeenCalled();
+      expect(result).toEqual({ items: [] });
+    });
+  });
 });
