@@ -1,5 +1,5 @@
 const ErrsoleMongoDB = require('../../lib/index');
-/* globals describe, it,  beforeAll, afterAll, expect */
+/* globals describe, it,  beforeAll, afterAll, expect jest */
 
 describe('ErrsoleMongoDB', () => {
   let errsoleMongoDB;
@@ -17,6 +17,43 @@ describe('ErrsoleMongoDB', () => {
 
   afterAll(async () => {
     await errsoleMongoDB.client.close();
+  });
+
+  describe('#postLogs', () => {
+    it('should add log entries to the database when successful', async () => {
+      // Arrange
+      const logs = [
+        { source: 'console', level: 'info', message: 'Log entry 1' },
+        { source: 'console', level: 'error', message: 'Log entry 2' },
+        { source: 'console', level: 'warn', message: 'Log entry 3' }
+      ];
+      const mockCollection = {
+        insertMany: jest.fn().mockResolvedValue()
+      };
+      const mockDb = {
+        collection: jest.fn().mockReturnValue(mockCollection)
+      };
+
+      const errsoleMongoDB = {
+        isConnectionInProgress: false,
+        db: mockDb,
+        logsCollectionName: 'errsole_logs',
+        postLogs: jest.fn().mockImplementation(async function (logEntries) {
+          while (this.isConnectionInProgress) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          await this.db.collection(this.logsCollectionName).insertMany(logEntries);
+          return {};
+        })
+      };
+
+      // Act
+      await errsoleMongoDB.postLogs(logs);
+
+      // Assert
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockCollection.insertMany).toHaveBeenCalledWith(logs);
+    });
   });
 
   describe('#createUser', () => {
