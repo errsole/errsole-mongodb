@@ -1,8 +1,16 @@
 const ErrsoleMongoDB = require('../../lib/index');
-/* globals describe, it,  beforeAll, afterAll, expect jest */
+const { ObjectId } = require('mongodb');
+/* globals describe, it,  beforeAll, afterAll, expect,beforeEach,  jest */
 
 describe('ErrsoleMongoDB', () => {
   let errsoleMongoDB;
+  const user = {
+    _id: new ObjectId(),
+    name: 'Peter Parker',
+    email: 'peter@gmail.com',
+    password: 'password123',
+    role: 'admin'
+  };
 
   beforeAll(async () => {
     errsoleMongoDB = new ErrsoleMongoDB('mongodb://localhost:27017', 'jest_DB');
@@ -58,12 +66,6 @@ describe('ErrsoleMongoDB', () => {
 
   describe('#createUser', () => {
     it('should create a new user', async () => {
-      const user = {
-        name: 'Peter Parker',
-        email: 'peter@gmail.com',
-        password: 'password123',
-        role: 'admin'
-      };
       const result = await errsoleMongoDB.createUser(user);
       expect(result.item).toHaveProperty('name', user.name);
       expect(result.item).toHaveProperty('email', user.email);
@@ -200,6 +202,39 @@ describe('ErrsoleMongoDB', () => {
       expect(collectionMock.limit).toHaveBeenCalledWith(100);
       expect(collectionMock.toArray).toHaveBeenCalled();
       expect(result).toEqual({ items: [] });
+    });
+  });
+
+  describe('#deleteUser', () => {
+    let mockDeleteOne;
+
+    beforeEach(() => {
+      mockDeleteOne = jest.fn(); // Create a jest mock function
+      errsoleMongoDB.db = {
+        collection: jest.fn().mockReturnValue({
+          deleteOne: mockDeleteOne
+        })
+      };
+      mockDeleteOne.mockResolvedValue({ deletedCount: 1 }); // Mimic successful deletion
+    });
+
+    it('should delete a user when given a valid ID', async () => {
+      const id = user._id.toString(); // Make sure to convert ObjectId to string if necessary
+
+      const result = await errsoleMongoDB.deleteUser(id);
+
+      expect(mockDeleteOne).toHaveBeenCalledWith({ _id: user._id });
+      expect(result).toEqual({}); // Assuming your function returns an empty object on success
+    });
+
+    it('should throw an error when no user is found with the given ID', async () => {
+      mockDeleteOne.mockResolvedValue({ deletedCount: 0 }); // Mimic no user found
+
+      const id = user._id.toString();
+
+      await expect(errsoleMongoDB.deleteUser(id))
+        .rejects
+        .toThrow('User not found.'); // Ensure the error is thrown as expected
     });
   });
 });
