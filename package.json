@@ -3,6 +3,7 @@
   "version": "1.4.0",
   "description": "MongoDB storage plugin for Errsole",
   "main": "lib/index.js",
+  "types": "types/index.d.ts",
   "scripts": {
     "test": "jest"
   },
@@ -19,7 +20,8 @@
     "mongodb": "^6.4.0"
   },
   "files": [
-    "lib/index.js"
+    "lib",
+    "types"
   ],
   "devDependencies": {
     "@shelf/jest-mongodb": "^4.2.0",
