@@ -1,7 +1,7 @@
 const { MongoClient } = require('mongodb');
 const ErrsoleMongoDB = require('./../lib/index');
-const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
+const bcrypt = require('bcryptjs');
 
 /* globals expect, jest, beforeEach, it, afterEach, describe */
 
@@ -36,6 +36,8 @@ const mockLogsCollection = {
   updateOne: jest.fn(),
   countDocuments: jest.fn(),
   find: jest.fn().mockReturnThis(),
+  sort: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
   toArray: jest.fn()
 };
 
@@ -145,42 +147,246 @@ describe('ErrsoleMongoDB', () => {
   });
 
   describe('postLogs', () => {
-    it('should add log entries to pending logs', () => {
-      errsole.postLogs([{ message: 'log1' }, { message: 'log2' }]);
-      expect(errsole.pendingLogs.length).toBe(2);
+    it('should add log entries to pendingLogs', () => {
+      const logEntries = [{ message: 'log1' }, { message: 'log2' }];
+      errsole.postLogs(logEntries);
+      expect(errsole.pendingLogs).toEqual(logEntries);
+    });
+
+    it('should call flushLogs if pendingLogs length reaches batchSize', () => {
+      errsole.batchSize = 2;
+      const logEntries = [{ message: 'log1' }, { message: 'log2' }];
+      const flushLogsSpy = jest.spyOn(errsole, 'flushLogs').mockImplementation(() => {});
+
+      errsole.postLogs(logEntries);
+
+      expect(flushLogsSpy).toHaveBeenCalled();
+      flushLogsSpy.mockRestore();
+    });
+
+    it('should not call flushLogs if pendingLogs length is less than batchSize', () => {
+      errsole.batchSize = 3;
+      const logEntries = [{ message: 'log1' }, { message: 'log2' }];
+      const flushLogsSpy = jest.spyOn(errsole, 'flushLogs').mockImplementation(() => {});
+
+      errsole.postLogs(logEntries);
+
+      expect(flushLogsSpy).not.toHaveBeenCalled();
+      flushLogsSpy.mockRestore();
     });
   });
 
   describe('flushLogs', () => {
-    it('should flush pending logs to the database', async () => {
-      errsole.pendingLogs.push({ message: 'log1' });
-      mockLogsCollection.insertMany.mockResolvedValue({});
+    it('should return immediately if there are no logs to flush', async () => {
+      errsole.pendingLogs = [];
       const result = await errsole.flushLogs();
       expect(result).toEqual({});
-      expect(mockLogsCollection.insertMany).toHaveBeenCalledWith([{ message: 'log1' }]);
+      expect(mockDb.collection('errsole_logs').insertMany).not.toHaveBeenCalled();
+    });
+
+    it('should wait until connection is ready before flushing logs', async () => {
+      errsole.isConnectionInProgress = true;
+      errsole.pendingLogs = [{ message: 'log1' }];
+
+      setTimeout(() => {
+        errsole.isConnectionInProgress = false;
+      }, 200);
+
+      const flushLogsPromise = errsole.flushLogs();
+      jest.advanceTimersByTime(200);
+
+      const result = await flushLogsPromise;
+      expect(result).toEqual({});
+      expect(mockDb.collection('errsole_logs').insertMany).toHaveBeenCalledWith([{ message: 'log1' }]);
+    });
+
+    it('should flush logs to the database when there are logs to flush', async () => {
+      errsole.isConnectionInProgress = false;
+      errsole.pendingLogs = [{ message: 'log1' }, { message: 'log2' }];
+
+      const result = await errsole.flushLogs();
+      expect(result).toEqual({});
+      expect(mockDb.collection('errsole_logs').insertMany).toHaveBeenCalledWith([{ message: 'log1' }, { message: 'log2' }]);
+    });
+
+    it('should handle errors during log flushing gracefully', async () => {
+      errsole.isConnectionInProgress = false;
+      errsole.pendingLogs = [{ message: 'log1' }];
+      const error = new Error('Insertion failed');
+      mockDb.collection('errsole_logs').insertMany.mockRejectedValue(error);
+
+      const result = await errsole.flushLogs();
+      expect(result).toBe(error);
     });
   });
 
   describe('getLogs', () => {
-    it('should retrieve log entries based on filters', async () => {
+    it('should set default limit if not provided', async () => {
       const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.find.mockReturnValue({ sort: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), toArray: jest.fn().mockResolvedValue(logs) });
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
       const result = await errsole.getLogs();
+      expect(result.items.length).toBe(1);
+      expect(mockLogsCollection.find).toHaveBeenCalled();
+      expect(mockLogsCollection.sort).toHaveBeenCalled();
+      expect(mockLogsCollection.limit).toHaveBeenCalledWith(100);
+    });
+
+    it('should set sort order based on lt_id', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const filters = { lt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      await errsole.getLogs(filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: -1 });
+    });
+
+    it('should set sort order based on gt_id', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const filters = { gt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      await errsole.getLogs(filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: 1 });
+    });
+
+    it('should set sort order based on lte_timestamp', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const filters = { lte_timestamp: new Date('2021-05-20T00:00:00Z') };
+      await errsole.getLogs(filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
+    });
+
+    it('should set sort order based on gte_timestamp', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const filters = { gte_timestamp: new Date('2021-05-20T00:00:00Z') };
+      await errsole.getLogs(filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1 });
+    });
+
+    it('should reverse documents if shouldReverse is true', async () => {
+      const logs = [{ _id: '123', message: 'log1' }, { _id: '124', message: 'log2' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const filters = { lt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      const result = await errsole.getLogs(filters);
+      expect(result.items[0].id).toBe('124');
+    });
+
+    it('should not reverse documents if shouldReverse is false', async () => {
+      const logs = [{ _id: '123', message: 'log1' }, { _id: '124', message: 'log2' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const filters = { gt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      const result = await errsole.getLogs(filters);
       expect(result.items[0].id).toBe('123');
-      expect(result.items[0].message).toBe('log1');
+    });
+
+    it('should format the returned documents correctly', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.getLogs();
+      expect(result.items[0]).toEqual({ id: '123', message: 'log1' });
     });
   });
 
   describe('searchLogs', () => {
-    it('should search log entries based on search terms and filters', async () => {
+    it('should set default limit if not provided', async () => {
       const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.find.mockReturnValue({ sort: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), toArray: jest.fn().mockResolvedValue(logs) });
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
       const result = await errsole.searchLogs(['error']);
+      expect(result.items.length).toBe(1);
+      expect(mockLogsCollection.find).toHaveBeenCalled();
+      expect(mockLogsCollection.sort).toHaveBeenCalled();
+      expect(mockLogsCollection.limit).toHaveBeenCalledWith(100);
+    });
+
+    it('should construct the query for text search', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error', 'warning'];
+      const expectedQuery = { $text: { $search: '"error" "warning"' } };
+
+      await errsole.searchLogs(searchTerms);
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(expectedQuery, { projection: { meta: 0 } });
+    });
+
+    it('should set sort order based on lt_id', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const filters = { lt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      await errsole.searchLogs(searchTerms, filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: -1 });
+    });
+
+    it('should set sort order based on gt_id', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const filters = { gt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      await errsole.searchLogs(searchTerms, filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: 1 });
+    });
+
+    it('should set sort order based on lte_timestamp', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const filters = { lte_timestamp: new Date('2021-05-20T00:00:00Z') };
+      await errsole.searchLogs(searchTerms, filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
+    });
+
+    it('should set sort order based on gte_timestamp', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const filters = { gte_timestamp: new Date('2021-05-20T00:00:00Z') };
+      await errsole.searchLogs(searchTerms, filters);
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1 });
+    });
+
+    it('should reverse documents if shouldReverse is true', async () => {
+      const logs = [{ _id: '123', message: 'log1' }, { _id: '124', message: 'log2' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const filters = { lt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      const result = await errsole.searchLogs(searchTerms, filters);
+      expect(result.items[0].id).toBe('124');
+    });
+
+    it('should not reverse documents if shouldReverse is false', async () => {
+      const logs = [{ _id: '123', message: 'log1' }, { _id: '124', message: 'log2' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const filters = { gt_id: '60a6cbbd8574f2a0d24c4d5e' };
+      const result = await errsole.searchLogs(searchTerms, filters);
       expect(result.items[0].id).toBe('123');
-      expect(result.items[0].message).toBe('log1');
+    });
+
+    it('should format the returned documents correctly', async () => {
+      const logs = [{ _id: '123', message: 'log1' }];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const searchTerms = ['error'];
+      const result = await errsole.searchLogs(searchTerms);
+      expect(result.items[0]).toEqual({ id: '123', message: 'log1' });
     });
   });
-
   describe('ensureLogsTTL', () => {
     it('should ensure the TTL configuration for logs is set', async () => {
       errsole.getConfig = jest.fn().mockResolvedValue({});
