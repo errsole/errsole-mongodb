@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 const ErrsoleMongoDB = require('./../lib/index');
 const cron = require('node-cron');
 const bcrypt = require('bcryptjs');
@@ -35,6 +35,9 @@ const mockLogsCollection = {
   deleteOne: jest.fn(),
   updateOne: jest.fn(),
   countDocuments: jest.fn(),
+  indexes: jest.fn().mockResolvedValue([
+    { key: { timestamp: 1 }, expireAfterSeconds: 2592000, name: 'timestamp_1' }
+  ]),
   find: jest.fn().mockReturnThis(),
   sort: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
@@ -470,11 +473,46 @@ describe('ErrsoleMongoDB', () => {
   });
 
   describe('deleteUser', () => {
-    it('should delete a user record', async () => {
+    it('should delete a user successfully', async () => {
       mockLogsCollection.deleteOne.mockResolvedValue({ deletedCount: 1 });
-      const result = await errsole.deleteUser('123');
+
+      const result = await errsole.deleteUser('60a6cbbd8574f2a0d24c4d5e');
       expect(result).toEqual({});
-      expect(mockLogsCollection.deleteOne).toHaveBeenCalledWith({ _id: { id: '123' } });
+      expect(mockLogsCollection.deleteOne).toHaveBeenCalledWith({ _id: new ObjectId('60a6cbbd8574f2a0d24c4d5e') });
+    });
+
+    it('should throw an error if the user is not found', async () => {
+      mockLogsCollection.deleteOne.mockResolvedValue({ deletedCount: 0 });
+
+      await expect(errsole.deleteUser('60a6cbbd8574f2a0d24c4d5e')).rejects.toThrow('User not found.');
+      expect(mockLogsCollection.deleteOne).toHaveBeenCalledWith({ _id: new ObjectId('60a6cbbd8574f2a0d24c4d5e') });
+    });
+
+    it('should handle errors gracefully', async () => {
+      const error = new Error('Database error');
+      mockLogsCollection.deleteOne.mockRejectedValue(error);
+
+      await expect(errsole.deleteUser('60a6cbbd8574f2a0d24c4d5e')).rejects.toThrow('Database error');
+      expect(mockLogsCollection.deleteOne).toHaveBeenCalledWith({ _id: new ObjectId('60a6cbbd8574f2a0d24c4d5e') });
+    });
+  });
+
+  describe('updateLogsCollectionTTL', () => {
+    it('should update the TTL index if it does not match the new TTL value', async () => {
+      await errsole.updateLogsCollectionTTL(7200000); // 2 hours in milliseconds
+
+      expect(mockLogsCollection.dropIndex).toHaveBeenCalledWith('timestamp_1');
+      expect(mockLogsCollection.createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 7200 });
+    });
+
+    it('should handle errors gracefully', async () => {
+      const error = new Error('Database error');
+      mockLogsCollection.createIndex.mockRejectedValue(error);
+
+      await expect(errsole.updateLogsCollectionTTL(7200000)).rejects.toThrow('Database error');
+
+      expect(mockLogsCollection.dropIndex).toHaveBeenCalledWith('timestamp_1');
+      expect(mockLogsCollection.createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 7200 });
     });
   });
 });
