@@ -47,7 +47,8 @@ const mockDb = {
       { name: 'errsole_users' },
       { name: 'errsole_config' }
     ])
-  })
+  }),
+  createCollection: jest.fn()
 };
 
 const mockClient = {
@@ -89,6 +90,28 @@ describe('ErrsoleMongoDB', () => {
       await errsole.init();
       expect(mockClient.connect).toHaveBeenCalled();
       expect(mockDb.listCollections).toHaveBeenCalled();
+    });
+  });
+
+  describe('ensureCollections', () => {
+    it('should ensure collections and indexes are created if they do not exist', async () => {
+      mockDb.listCollections().toArray.mockResolvedValue([]);
+
+      await errsole.ensureCollections();
+
+      expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_users');
+      expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_config');
+
+      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, _id: 1 });
+      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, timestamp: 1 });
+      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ hostname: 1, pid: 1, _id: 1 });
+      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ message: 'text' });
+
+      expect(mockDb.collection('errsole_users').createIndex).toHaveBeenCalledWith({ email: 1 }, { unique: true });
+
+      expect(mockDb.collection('errsole_config').dropIndex).toHaveBeenCalledWith('name_1');
+      expect(mockDb.collection('errsole_config').createIndex).toHaveBeenCalledWith({ key: 1 }, { unique: true });
     });
   });
 
