@@ -14,8 +14,7 @@
     "log",
     "logs",
     "logging",
-    "logger",
-    "loglevel"
+    "logger"
   ],
   "license": "MIT",
   "dependencies": {
