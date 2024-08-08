@@ -9,7 +9,9 @@
     "coveralls": "jest --coverage && cat ./coverage/lcov.info | coveralls"
   },
   "keywords": [
+    "errsole",
     "mongodb",
+    "log",
     "logs",
     "logging",
     "logger",
