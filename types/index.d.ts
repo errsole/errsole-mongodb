@@ -10,6 +10,7 @@ declare module 'errsole-mongodb' {
     level: string;
     message: string;
     meta?: string;
+    errsole_id?: number;
   }
 
   interface LogFilter {
@@ -23,6 +24,8 @@ declare module 'errsole-mongodb' {
     lte_timestamp?: Date;
     gte_timestamp?: Date;
     limit?: number;
+    errsole_id?: number;
+
   }
 
   interface Config {
@@ -44,13 +47,11 @@ declare module 'errsole-mongodb' {
     getConfig(key: string): Promise<{ item: Config }>;
     setConfig(key: string, value: string): Promise<{ item: Config }>;
     deleteConfig(key: string): Promise<{}>;
-
     postLogs(logEntries: Log[]): Promise<{}>;
     getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
     searchLogs(searchTerms: string[], filters?: LogFilter): Promise<{ items: Log[], filters: LogFilter[] }>;
-
+    getHostnames(): Promise<{ items: string[] }>;
     getMeta(id: string): Promise<{ item: { id: string; meta: string } }>;
-
     createUser(user: { name: string; email: string; password: string; role: string }): Promise<{ item: User }>;
     verifyUser(email: string, password: string): Promise<{ item: User }>;
     getUserCount(): Promise<{ count: number }>;
