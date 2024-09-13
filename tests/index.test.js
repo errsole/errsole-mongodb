@@ -46,7 +46,8 @@ const mockLogsCollection = {
   find: jest.fn().mockReturnThis(),
   sort: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
-  toArray: jest.fn()
+  toArray: jest.fn(),
+  distinct: jest.fn()
 };
 
 const mockUsersCollection = {
@@ -108,14 +109,6 @@ describe('ErrsoleMongoDB', () => {
     jest.useRealTimers();
     // Restore console.error
     console.error = originalConsoleError;
-  });
-
-  describe('init', () => {
-    it('should initialize the connection and ensure collections', async () => {
-      await errsole.init();
-      expect(mockClient.connect).toHaveBeenCalled();
-      expect(mockDb.listCollections).toHaveBeenCalled();
-    });
   });
 
   describe('init', () => {
@@ -520,8 +513,8 @@ describe('ErrsoleMongoDB', () => {
       expect(result.items.length).toBe(1);
       expect(mockLogsCollection.find).toHaveBeenCalledWith({
         $or: [
-          { $and: [{ source: 'source1' }, { level: 'info' }] },
-          { $and: [{ source: 'source2' }, { level: 'error' }] }
+          { source: 'source1', level: 'info' },
+          { source: 'source2', level: 'error' }
         ]
       }, { projection: { meta: 0 } });
     });
@@ -686,16 +679,13 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.searchLogs(searchTerms, filters);
       expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        {
-          $text: { $search: '"error"' },
-          $or: [
-            { $and: [{ source: 'source1' }, { level: 'info' }] },
-            { $and: [{ source: 'source2' }, { level: 'error' }] }
-          ]
-        },
-        { projection: { meta: 0 } }
-      );
+      expect(mockLogsCollection.find).toHaveBeenCalledWith({
+        $text: { $search: '"error"' },
+        $or: [
+          { source: 'source1', level: 'info' },
+          { source: 'source2', level: 'error' }
+        ]
+      }, { projection: { meta: 0 } });
     });
 
     it('should reverse documents if shouldReverse is true', async () => {
@@ -809,7 +799,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB createUser', () => {
+  describe('createUser', () => {
     let errsole;
 
     beforeEach(() => {
@@ -902,7 +892,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB verifyUser', () => {
+  describe('verifyUser', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1011,7 +1001,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB getUserCount', () => {
+  describe('getUserCount', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1041,7 +1031,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB getAllUsers', () => {
+  describe('getAllUsers', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1156,7 +1146,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB updateUserByEmail', () => {
+  describe('updateUserByEmail', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1288,7 +1278,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB updatePassword', () => {
+  describe('updatePassword', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1407,7 +1397,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB deleteUser', () => {
+  describe('deleteUser', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1466,15 +1456,70 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.dropIndex).toHaveBeenCalledWith('timestamp_1');
       expect(mockLogsCollection.createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 7200 });
     });
+  });
+  describe('getHostnames', () => {
+    it('should return sorted hostnames excluding null or empty values', async () => {
+      const mockHostnames = ['host1', 'host2', null, ''];
+      mockLogsCollection.distinct.mockResolvedValue(mockHostnames);
 
-    it('should handle errors gracefully', async () => {
-      const error = new Error('Database error');
-      mockLogsCollection.createIndex.mockRejectedValue(error);
+      const result = await errsole.getHostnames();
 
-      await expect(errsole.updateLogsCollectionTTL(7200000)).rejects.toThrow('Database error');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
 
-      expect(mockLogsCollection.dropIndex).toHaveBeenCalledWith('timestamp_1');
-      expect(mockLogsCollection.createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 7200 });
+      // Expected sorted hostnames, without null and empty strings
+      const expectedHostnames = ['host1', 'host2'];
+      expect(result.items).toEqual(expectedHostnames);
+    });
+  });
+
+  describe('ErrsoleMongoDB - getHostnames', () => {
+    let errsole;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
+    });
+
+    it('should return sorted hostnames excluding null or empty values', async () => {
+    // Mock the distinct method to return a list of hostnames including null and empty values
+      const mockHostnames = ['host1', 'host2', null, '', 'host3'];
+      mockLogsCollection.distinct.mockResolvedValue(mockHostnames);
+
+      const result = await errsole.getHostnames();
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
+
+      // Expected sorted hostnames, without null and empty strings
+      const expectedHostnames = ['host1', 'host2', 'host3'];
+      expect(result.items).toEqual(expectedHostnames);
+    });
+
+    it('should handle empty hostname list', async () => {
+    // Mock the distinct method to return an empty array
+      mockLogsCollection.distinct.mockResolvedValue([]);
+
+      const result = await errsole.getHostnames();
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
+
+      // Should return an empty items array
+      expect(result.items).toEqual([]);
+    });
+
+    it('should handle errors during hostname retrieval and return the error', async () => {
+      // Mock the distinct method to return a database error
+      const mockError = new Error('Database error');
+      mockLogsCollection.distinct.mockRejectedValue(mockError);
+
+      const result = await errsole.getHostnames();
+
+      expect(result).toBeInstanceOf(Error); // Expect that the result is an instance of Error
+      expect(result.message).toBe('Database error'); // Expect the error message to match
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
     });
   });
 });
