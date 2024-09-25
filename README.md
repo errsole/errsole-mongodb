@@ -1,4 +1,5 @@
 # errsole-mongodb
+<a href="https://coveralls.io/github/errsole/errsole-mongodb"><img src="https://coveralls.io/repos/github/errsole/errsole-mongodb/badge.svg" alt="Coverage Status" /></a>
 
 MongoDB storage plugin for Errsole.
 
