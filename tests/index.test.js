@@ -28,7 +28,7 @@ jest.mock('mongodb', () => ({
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn(),
-  compare: jest.fn() // Mock bcrypt.compare
+  compare: jest.fn()
 }));
 
 const mockLogsCollection = {
@@ -57,7 +57,7 @@ const mockUsersCollection = {
   find: jest.fn().mockReturnThis(),
   countDocuments: jest.fn(),
   updateOne: jest.fn(),
-  deleteOne: jest.fn(), // Ensure deleteOne is mocked here
+  deleteOne: jest.fn(),
   toArray: jest.fn()
 };
 
@@ -93,13 +93,11 @@ describe('ErrsoleMongoDB', () => {
     jest.clearAllMocks();
     errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
 
-    // Mock setInterval and cron.schedule
     jest.useFakeTimers();
     jest.spyOn(global, 'setInterval');
     cronJob = { stop: jest.fn() };
     jest.spyOn(cron, 'schedule').mockReturnValue(cronJob);
 
-    // Suppress console.error
     originalConsoleError = console.error;
     console.error = jest.fn();
   });
@@ -107,7 +105,6 @@ describe('ErrsoleMongoDB', () => {
   afterEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
-    // Restore console.error
     console.error = originalConsoleError;
   });
 
@@ -1153,7 +1150,6 @@ describe('ErrsoleMongoDB', () => {
       jest.clearAllMocks();
       errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
 
-      // Ensure mockUsersCollection is properly defined
       mockDb.collection.mockImplementation((name) => {
         if (name === 'errsole_users') {
           return mockUsersCollection;
@@ -1285,7 +1281,6 @@ describe('ErrsoleMongoDB', () => {
       jest.clearAllMocks();
       errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
 
-      // Ensure mockUsersCollection is properly defined
       mockDb.collection.mockImplementation((name) => {
         if (name === 'errsole_users') {
           return mockUsersCollection;
@@ -1404,7 +1399,6 @@ describe('ErrsoleMongoDB', () => {
       jest.clearAllMocks();
       errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
 
-      // Ensure mockUsersCollection is properly defined
       mockDb.collection.mockImplementation((name) => {
         if (name === 'errsole_users') {
           return mockUsersCollection;
@@ -1451,7 +1445,7 @@ describe('ErrsoleMongoDB', () => {
 
   describe('updateLogsCollectionTTL', () => {
     it('should update the TTL index if it does not match the new TTL value', async () => {
-      await errsole.updateLogsCollectionTTL(7200000); // 2 hours in milliseconds
+      await errsole.updateLogsCollectionTTL(7200000);
 
       expect(mockLogsCollection.dropIndex).toHaveBeenCalledWith('timestamp_1');
       expect(mockLogsCollection.createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 7200 });
@@ -1467,7 +1461,6 @@ describe('ErrsoleMongoDB', () => {
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
 
-      // Expected sorted hostnames, without null and empty strings
       const expectedHostnames = ['host1', 'host2'];
       expect(result.items).toEqual(expectedHostnames);
     });
@@ -1482,7 +1475,6 @@ describe('ErrsoleMongoDB', () => {
     });
 
     it('should return sorted hostnames excluding null or empty values', async () => {
-    // Mock the distinct method to return a list of hostnames including null and empty values
       const mockHostnames = ['host1', 'host2', null, '', 'host3'];
       mockLogsCollection.distinct.mockResolvedValue(mockHostnames);
 
@@ -1491,33 +1483,28 @@ describe('ErrsoleMongoDB', () => {
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
 
-      // Expected sorted hostnames, without null and empty strings
       const expectedHostnames = ['host1', 'host2', 'host3'];
       expect(result.items).toEqual(expectedHostnames);
     });
 
     it('should handle empty hostname list', async () => {
-    // Mock the distinct method to return an empty array
       mockLogsCollection.distinct.mockResolvedValue([]);
 
       const result = await errsole.getHostnames();
 
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
-
-      // Should return an empty items array
       expect(result.items).toEqual([]);
     });
 
     it('should handle errors during hostname retrieval and return the error', async () => {
-      // Mock the distinct method to return a database error
       const mockError = new Error('Database error');
       mockLogsCollection.distinct.mockRejectedValue(mockError);
 
       const result = await errsole.getHostnames();
 
-      expect(result).toBeInstanceOf(Error); // Expect that the result is an instance of Error
-      expect(result.message).toBe('Database error'); // Expect the error message to match
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('Database error');
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
     });
