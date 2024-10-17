@@ -71,7 +71,8 @@ const mockDb = {
     toArray: jest.fn().mockResolvedValue([
       { name: 'errsole_logs' },
       { name: 'errsole_users' },
-      { name: 'errsole_config' }
+      { name: 'errsole_config' },
+      { name: 'errsole_notifications' }
     ])
   }),
   createCollection: jest.fn()
@@ -119,25 +120,36 @@ describe('ErrsoleMongoDB', () => {
   describe('ensureCollections', () => {
     it('should ensure collections and indexes are created if they do not exist', async () => {
       mockDb.listCollections().toArray.mockResolvedValue([]);
-
+  
       await errsole.ensureCollections();
-
+  
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_logs');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_users');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_config');
-
+      expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_notifications');
+  
+      // Expectations for 'errsole_logs' indexes
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, _id: 1 });
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, timestamp: 1 });
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ hostname: 1, pid: 1, _id: 1 });
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ message: 'text' });
-
+      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ errsole_id: 1 }); // No trailing comma here
+  
+      // Expectations for 'errsole_users' indexes
       expect(mockDb.collection('errsole_users').createIndex).toHaveBeenCalledWith({ email: 1 }, { unique: true });
-
+  
+      // Expectations for 'errsole_config' indexes
       expect(mockDb.collection('errsole_config').dropIndex).toHaveBeenCalledWith('name_1');
       expect(mockDb.collection('errsole_config').createIndex).toHaveBeenCalledWith({ key: 1 }, { unique: true });
+  
+      // Expectations for 'errsole_notifications' indexes
+      expect(mockDb.collection('errsole_notifications').createIndex).toHaveBeenCalledWith(
+        { hostname: 1, hashed_message: 1, created_at: 1 }
+      );
+      expect(mockDb.collection('errsole_notifications').createIndex).toHaveBeenCalledWith({ created_at: 1 });
     });
   });
-
+   
   describe('getConfig', () => {
     it('should retrieve the configuration item successfully', async () => {
       const key = 'testKey';
