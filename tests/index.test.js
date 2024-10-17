@@ -21,10 +21,18 @@ jest.mock('mongodb', () => ({
     countDocuments: jest.fn(),
     indexes: jest.fn(),
     listCollections: jest.fn().mockReturnThis(),
-    toArray: jest.fn()
+    toArray: jest.fn(),
+    startSession: jest.fn().mockReturnValue({
+      withTransaction: jest.fn().mockImplementation(async (callback) => {
+        await callback(); // Simulates a successful transaction
+      }),
+      endSession: jest.fn() // Mocks the session ending behavior
+    })
   }),
   ObjectId: jest.fn().mockImplementation(id => ({ id }))
 }));
+
+
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn(),
@@ -1521,4 +1529,114 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
     });
   });
+
+  describe('insertNotificationItem', () => {
+    let errsole;
+    let notification;
+    let mockSession;
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+      errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
+  
+      // Define a mock notification
+      notification = {
+        errsole_id: 'test_errsole_id',
+        hostname: 'test_hostname',
+        hashed_message: 'test_hashed_message'
+      };
+  
+      // Mock session behavior
+      mockSession = {
+        withTransaction: jest.fn().mockImplementation(async (callback) => {
+          await callback(); // Simulates a successful transaction
+        }),
+        endSession: jest.fn() // Mocks the session end behavior
+      };
+  
+      // Mock startSession
+      mockClient.startSession = jest.fn().mockReturnValue(mockSession);
+    });
+  
+    it('should insert a notification and retrieve the previous one', async () => {
+      const previousNotification = {
+        _id: 'mock_previous_id',
+        errsole_id: 'test_errsole_id',
+        hostname: 'test_hostname',
+        hashed_message: 'test_hashed_message',
+        created_at: new Date()
+      };
+  
+      mockLogsCollection.findOne.mockResolvedValue(previousNotification);
+      mockLogsCollection.insertOne.mockResolvedValue({});
+      mockLogsCollection.countDocuments.mockResolvedValue(1);
+  
+      const result = await errsole.insertNotificationItem(notification);
+  
+      expect(mockDb.collection).toHaveBeenCalledWith(errsole.notificationsCollectionName);
+      expect(mockLogsCollection.findOne).toHaveBeenCalledWith(
+        { hostname: 'test_hostname', hashed_message: 'test_hashed_message' },
+        { sort: { created_at: -1 }, session: expect.any(Object) }
+      );
+      expect(mockLogsCollection.insertOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errsole_id: 'test_errsole_id',
+          hostname: 'test_hostname',
+          hashed_message: 'test_hashed_message'
+        }),
+        { session: expect.any(Object) }
+      );
+      expect(mockLogsCollection.countDocuments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostname: 'test_hostname',
+          hashed_message: 'test_hashed_message',
+          created_at: expect.any(Object)
+        }),
+        { session: expect.any(Object) }
+      );
+      expect(result).toEqual({
+        previousNotificationItem: { id: 'mock_previous_id', errsole_id: 'test_errsole_id', hostname: 'test_hostname', hashed_message: 'test_hashed_message', created_at: expect.any(Date) },
+        todayNotificationCount: 1
+      });
+    });
+  
+    it('should return null for previous notification if not found', async () => {
+      mockLogsCollection.findOne.mockResolvedValue(null);
+      mockLogsCollection.insertOne.mockResolvedValue({});
+      mockLogsCollection.countDocuments.mockResolvedValue(1);
+  
+      const result = await errsole.insertNotificationItem(notification);
+  
+      expect(result.previousNotificationItem).toBeNull();
+      expect(result.todayNotificationCount).toBe(1);
+    });
+  
+    it('should throw an error if the transaction fails', async () => {
+      const mockError = new Error('Transaction error');
+      mockSession.withTransaction.mockRejectedValueOnce(mockError);
+  
+      await expect(errsole.insertNotificationItem(notification)).rejects.toThrow('Transaction error');
+      expect(mockSession.endSession).toHaveBeenCalled();
+    });
+  
+    it('should end the session after successful execution', async () => {
+      mockLogsCollection.findOne.mockResolvedValue(null);
+      mockLogsCollection.insertOne.mockResolvedValue({});
+      mockLogsCollection.countDocuments.mockResolvedValue(1);
+  
+      await errsole.insertNotificationItem(notification);
+  
+      expect(mockSession.endSession).toHaveBeenCalled();
+    });
+  
+    it('should throw an error if session initiation fails', async () => {
+      const mockError = new Error('Session initiation failed');
+      mockClient.startSession.mockImplementationOnce(() => {
+        throw mockError;
+      });
+  
+      await expect(errsole.insertNotificationItem(notification)).rejects.toThrow('Session initiation failed');
+    });
+  });
+  
 });
