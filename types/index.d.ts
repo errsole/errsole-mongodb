@@ -41,6 +41,15 @@ declare module 'errsole-mongodb' {
     role: string;
   }
 
+  interface Notification {
+    id?: string; 
+    errsole_id: number;
+    hostname: string;
+    hashed_message: string;
+    created_at?: Date;
+    updated_at?: Date;
+  }
+
   class ErrsoleMongoDB {
     constructor(uri: string, dbNameOrOptions: string | MongoClientOptions, options?: MongoClientOptions);
 
@@ -60,6 +69,10 @@ declare module 'errsole-mongodb' {
     updateUserByEmail(email: string, updates: Partial<User>): Promise<{ item: User }>;
     updatePassword(email: string, currentPassword: string, newPassword: string): Promise<{ item: User }>;
     deleteUser(id: string): Promise<{}>;
+    insertNotificationItem(notification: Notification): Promise<{
+      previousNotificationItem: Notification | null;
+      todayNotificationCount: number;
+    }>;
   }
 
   export default ErrsoleMongoDB;
