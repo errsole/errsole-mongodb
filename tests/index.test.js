@@ -41,6 +41,7 @@ const mockLogsCollection = {
   deleteOne: jest.fn(),
   updateOne: jest.fn(),
   countDocuments: jest.fn(),
+  deleteMany: jest.fn(),
   indexes: jest.fn().mockResolvedValue([
     { key: { timestamp: 1 }, expireAfterSeconds: 2592000, name: 'timestamp_1' }
   ]),
@@ -62,10 +63,19 @@ const mockUsersCollection = {
   toArray: jest.fn()
 };
 
+// Define mock methods for the errsole_notifications collection
+const mockNotificationsCollection = {
+  createIndex: jest.fn(),
+  deleteMany: jest.fn()
+  // Add other methods if your class interacts with them
+};
+
 const mockDb = {
   collection: jest.fn().mockImplementation(name => {
     if (name === 'errsole_logs') return mockLogsCollection;
     if (name === 'errsole_users') return mockUsersCollection;
+    if (name === 'errsole_notifications') return mockNotificationsCollection;
+    // Add other collections as needed
     return mockLogsCollection;
   }),
   listCollections: jest.fn().mockReturnValue({
@@ -1674,6 +1684,29 @@ describe('ErrsoleMongoDB', () => {
         previousNotificationItem: null,
         todayNotificationCount: 1
       });
+    });
+  });
+
+  describe('deleteExpiredNotificationItems', () => {
+    it('should skip execution if deleteExpiredNotificationItems is already running', async () => {
+      // Set the flag to true
+      errsole.deleteExpiredNotificationItemsRunning = true;
+
+      // Spy on getConfig to ensure it's not called
+      const getConfigSpy = jest.spyOn(errsole, 'getConfig');
+
+      // Reset mock call counts after instantiation
+      mockDb.collection.mockClear();
+      mockNotificationsCollection.deleteMany.mockClear();
+
+      // Call the method
+      await errsole.deleteExpiredNotificationItems();
+
+      // Ensure deleteMany is not called
+      expect(mockNotificationsCollection.deleteMany).not.toHaveBeenCalled();
+
+      // Ensure getConfig is not called
+      expect(getConfigSpy).not.toHaveBeenCalled();
     });
   });
 });
