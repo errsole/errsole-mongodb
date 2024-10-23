@@ -569,7 +569,38 @@ describe('ErrsoleMongoDB', () => {
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.find).toHaveBeenCalledWith({ hostname: 'localhost' }, { projection: { meta: 0 } });
     });
+
+    it('should apply hostnames filter using $in operator when filters.hostnames is provided', async () => {
+      const filters = { hostnames: ['host1', 'host2'] };
+      const mockLogs = [{ _id: '123', message: 'log1' }, { _id: '124', message: 'log2' }];
+
+      mockLogsCollection.toArray.mockResolvedValue(mockLogs);
+
+      const result = await errsole.getLogs(filters);
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.find).toHaveBeenCalledWith({
+        hostname: { $in: ['host1', 'host2'] }
+      }, { projection: { meta: 0 } });
+      expect(result.items.length).toBe(2);
+    });
+
+    it('should apply errsole_id filter and push to $or condition when filters.errsole_id is provided', async () => {
+      const filters = { errsole_id: 101 };
+      const mockLogs = [{ _id: '123', message: 'log1' }];
+
+      mockLogsCollection.toArray.mockResolvedValue(mockLogs);
+
+      const result = await errsole.getLogs(filters);
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.find).toHaveBeenCalledWith({
+        $or: [{ errsole_id: 101 }]
+      }, { projection: { meta: 0 } });
+      expect(result.items.length).toBe(1);
+    });
   });
+
   describe('searchLogs', () => {
     let errsole;
 
@@ -744,6 +775,40 @@ describe('ErrsoleMongoDB', () => {
         { $text: { $search: '"error"' }, hostname: 'localhost' },
         { projection: { meta: 0 } }
       );
+    });
+
+    it('should apply hostnames filter using $in operator when filters.hostnames is provided', async () => {
+      const searchTerms = ['error'];
+      const filters = { hostnames: ['host1', 'host2'] };
+      const mockLogs = [{ _id: '123', message: 'log1' }, { _id: '124', message: 'log2' }];
+
+      mockLogsCollection.toArray.mockResolvedValue(mockLogs);
+
+      const result = await errsole.searchLogs(searchTerms, filters);
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.find).toHaveBeenCalledWith({
+        $text: { $search: '"error"' },
+        hostname: { $in: ['host1', 'host2'] }
+      }, { projection: { meta: 0 } });
+      expect(result.items.length).toBe(2);
+    });
+
+    it('should apply errsole_id filter and push to $or condition when filters.errsole_id is provided', async () => {
+      const searchTerms = ['error'];
+      const filters = { errsole_id: 101 };
+      const mockLogs = [{ _id: '123', message: 'log1' }];
+
+      mockLogsCollection.toArray.mockResolvedValue(mockLogs);
+
+      const result = await errsole.searchLogs(searchTerms, filters);
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.find).toHaveBeenCalledWith({
+        $text: { $search: '"error"' },
+        $or: [{ errsole_id: 101 }]
+      }, { projection: { meta: 0 } });
+      expect(result.items.length).toBe(1);
     });
   });
 
@@ -1469,6 +1534,7 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.createIndex).toHaveBeenCalledWith({ timestamp: 1 }, { expireAfterSeconds: 7200 });
     });
   });
+
   describe('getHostnames', () => {
     it('should return sorted hostnames excluding null or empty values', async () => {
       const mockHostnames = ['host1', 'host2', null, ''];
@@ -1484,7 +1550,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB - getHostnames', () => {
+  describe('getHostnames', () => {
     let errsole;
 
     beforeEach(() => {
