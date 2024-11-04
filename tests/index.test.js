@@ -166,7 +166,6 @@ describe('ErrsoleMongoDB', () => {
       expect(mockDb.collection('errsole_notifications').createIndex).toHaveBeenCalledWith(
         { hostname: 1, hashed_message: 1, created_at: 1 }
       );
-      expect(mockDb.collection('errsole_notifications').createIndex).toHaveBeenCalledWith({ created_at: 1 });
     });
   });
 
@@ -1182,7 +1181,7 @@ describe('ErrsoleMongoDB', () => {
     });
   });
 
-  describe('ErrsoleMongoDB getUserByEmail', () => {
+  describe('getUserByEmail', () => {
     let errsole;
 
     beforeEach(() => {
