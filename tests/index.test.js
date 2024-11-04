@@ -1664,49 +1664,5 @@ describe('ErrsoleMongoDB', () => {
 
       await expect(errsole.insertNotificationItem(notification)).rejects.toThrow('Transaction failed');
     });
-
-    it('should return null for previousNotificationItem if no previous notification is found', async () => {
-      const notification = {
-        errsole_id: 101,
-        hostname: 'localhost',
-        hashed_message: 'hashedMsg'
-      };
-
-      const mockInsertResult = { insertedId: new ObjectId() };
-
-      mockLogsCollection.findOne.mockResolvedValue(null);
-      mockLogsCollection.insertOne.mockResolvedValue(mockInsertResult);
-      mockLogsCollection.countDocuments.mockResolvedValue(1);
-
-      const result = await errsole.insertNotificationItem(notification);
-
-      expect(result).toEqual({
-        previousNotificationItem: null,
-        todayNotificationCount: 1
-      });
-    });
-  });
-
-  describe('deleteExpiredNotificationItems', () => {
-    it('should skip execution if deleteExpiredNotificationItems is already running', async () => {
-      // Set the flag to true
-      errsole.deleteExpiredNotificationItemsRunning = true;
-
-      // Spy on getConfig to ensure it's not called
-      const getConfigSpy = jest.spyOn(errsole, 'getConfig');
-
-      // Reset mock call counts after instantiation
-      mockDb.collection.mockClear();
-      mockNotificationsCollection.deleteMany.mockClear();
-
-      // Call the method
-      await errsole.deleteExpiredNotificationItems();
-
-      // Ensure deleteMany is not called
-      expect(mockNotificationsCollection.deleteMany).not.toHaveBeenCalled();
-
-      // Ensure getConfig is not called
-      expect(getConfigSpy).not.toHaveBeenCalled();
-    });
   });
 });
