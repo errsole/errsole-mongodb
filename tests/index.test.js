@@ -1664,4 +1664,44 @@ describe('ErrsoleMongoDB', () => {
       await expect(errsole.insertNotificationItem(notification)).rejects.toThrow('Transaction failed');
     });
   });
+
+  describe('DeleteAllLogs', () => {
+    let errsole;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
+    });
+
+    it('should delete all logs successfully when there are logs in the collection', async () => {
+      const mockDeleteResult = { deletedCount: 10 };
+      mockLogsCollection.deleteMany.mockResolvedValue(mockDeleteResult);
+
+      const result = await errsole.DeleteAllLogs();
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.deleteMany).toHaveBeenCalledWith({});
+      expect(result).toEqual({});
+    });
+
+    it('should throw an error if no logs are found to delete', async () => {
+      const mockDeleteResult = { deletedCount: 0 };
+      mockLogsCollection.deleteMany.mockResolvedValue(mockDeleteResult);
+
+      await expect(errsole.DeleteAllLogs()).rejects.toThrow('No logs were found to delete.');
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.deleteMany).toHaveBeenCalledWith({});
+    });
+
+    it('should handle errors during deletion and propagate the error', async () => {
+      const mockError = new Error('Database error during deletion');
+      mockLogsCollection.deleteMany.mockRejectedValue(mockError);
+
+      await expect(errsole.DeleteAllLogs()).rejects.toThrow('Database error during deletion');
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockLogsCollection.deleteMany).toHaveBeenCalledWith({});
+    });
+  });
 });
