@@ -59,6 +59,7 @@ declare module 'errsole-mongodb' {
     postLogs(logEntries: Log[]): Promise<{}>;
     getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
     searchLogs(searchTerms: string[], filters?: LogFilter): Promise<{ items: Log[], filters: LogFilter[] }>;
+    DeleteAllLogs(): Promise<{}>;
     getHostnames(): Promise<{ items: string[] }>;
     getMeta(id: string): Promise<{ item: { id: string; meta: string } }>;
     createUser(user: { name: string; email: string; password: string; role: string }): Promise<{ item: User }>;
