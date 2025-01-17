@@ -1670,7 +1670,7 @@ describe('ErrsoleMongoDB', () => {
       const mockDropResult = true;
       mockLogsCollection.drop.mockResolvedValue(mockDropResult);
 
-      const result = await errsole.DeleteAllLogs();
+      const result = await errsole.deleteAllLogs();
 
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.drop).toHaveBeenCalled();
@@ -1681,7 +1681,7 @@ describe('ErrsoleMongoDB', () => {
       const mockDropResult = { ok: 0 };
       mockLogsCollection.drop.mockResolvedValue(mockDropResult);
 
-      await expect(errsole.DeleteAllLogs()).rejects.toThrow('No logs were found to delete.');
+      await expect(errsole.deleteAllLogs()).rejects.toThrow('No logs were found to delete.');
 
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.drop).toHaveBeenCalled();
@@ -1691,7 +1691,7 @@ describe('ErrsoleMongoDB', () => {
       const mockError = new Error('Database error during deletion');
       mockLogsCollection.drop.mockRejectedValue(mockError);
 
-      await expect(errsole.DeleteAllLogs()).rejects.toThrow('Database error during deletion');
+      await expect(errsole.deleteAllLogs()).rejects.toThrow('Database error during deletion');
 
       expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
       expect(mockLogsCollection.drop).toHaveBeenCalled();
