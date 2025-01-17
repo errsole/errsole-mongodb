@@ -64,7 +64,6 @@ const mockUsersCollection = {
   toArray: jest.fn()
 };
 
-// Define mock methods for the errsole_notifications collection
 const mockNotificationsCollection = {
   createIndex: jest.fn(),
   deleteMany: jest.fn()
@@ -148,22 +147,15 @@ describe('ErrsoleMongoDB', () => {
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_users');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_config');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_notifications');
-
-      // Expectations for 'errsole_logs' indexes
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, _id: 1 });
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, timestamp: 1 });
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ hostname: 1, pid: 1, _id: 1 });
       expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ message: 'text' });
-      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ errsole_id: 1 }); // No trailing comma here
+      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ errsole_id: 1 });
 
-      // Expectations for 'errsole_users' indexes
       expect(mockDb.collection('errsole_users').createIndex).toHaveBeenCalledWith({ email: 1 }, { unique: true });
-
-      // Expectations for 'errsole_config' indexes
       expect(mockDb.collection('errsole_config').dropIndex).toHaveBeenCalledWith('name_1');
       expect(mockDb.collection('errsole_config').createIndex).toHaveBeenCalledWith({ key: 1 }, { unique: true });
-
-      // Expectations for 'errsole_notifications' indexes
       expect(mockDb.collection('errsole_notifications').createIndex).toHaveBeenCalledWith(
         { hostname: 1, hashed_message: 1, created_at: 1 }
       );
@@ -1675,7 +1667,7 @@ describe('ErrsoleMongoDB', () => {
     });
 
     it('should delete all logs successfully when there are logs in the collection', async () => {
-      const mockDropResult = true; // Simulating that the drop was successful
+      const mockDropResult = true;
       mockLogsCollection.drop.mockResolvedValue(mockDropResult);
 
       const result = await errsole.DeleteAllLogs();
@@ -1686,7 +1678,7 @@ describe('ErrsoleMongoDB', () => {
     });
 
     it('should throw an error if no logs are found to delete', async () => {
-      const mockDropResult = { ok: 0 }; // Simulating failure to drop (no logs to delete)
+      const mockDropResult = { ok: 0 };
       mockLogsCollection.drop.mockResolvedValue(mockDropResult);
 
       await expect(errsole.DeleteAllLogs()).rejects.toThrow('No logs were found to delete.');
