@@ -1705,4 +1705,43 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.drop).toHaveBeenCalled();
     });
   });
+
+  describe('updateNotificationsCollectionTTL', () => {
+    let errsole;
+    let mockIndexes;
+    beforeEach(() => {
+      jest.clearAllMocks();
+      errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
+      mockIndexes = [
+        { name: 'created_at_1', key: { created_at: 1 }, expireAfterSeconds: 3600 }
+      ];
+      mockDb.collection.mockReturnValue({
+        indexes: jest.fn().mockResolvedValue(mockIndexes),
+        createIndex: jest.fn(),
+        dropIndex: jest.fn()
+      });
+    });
+
+    it('should drop the existing TTL index and create a new one if TTL differs', async () => {
+      const notificationsTTL = 7200000;
+
+      await errsole.updateNotificationsCollectionTTL(notificationsTTL);
+
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_notifications');
+      expect(mockDb.collection().dropIndex).toHaveBeenCalledWith('created_at_1');
+      expect(mockDb.collection().createIndex).toHaveBeenCalledWith(
+        { created_at: 1 },
+        { expireAfterSeconds: 7200 }
+      );
+    });
+
+    it('should create a new TTL index if no TTL index exists', async () => {
+      mockIndexes = [];
+      await errsole.updateNotificationsCollectionTTL(7200000); // 2 hours TTL
+      expect(mockDb.collection().createIndex).toHaveBeenCalledWith(
+        { created_at: 1 },
+        { expireAfterSeconds: 7200 }
+      );
+    });
+  });
 });
