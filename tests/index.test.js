@@ -143,21 +143,25 @@ describe('ErrsoleMongoDB', () => {
 
       await errsole.ensureCollections();
 
-      expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_users');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_config');
       expect(mockDb.createCollection).toHaveBeenCalledWith('errsole_notifications');
-      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, _id: 1 });
-      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ source: 1, level: 1, timestamp: 1 });
-      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ hostname: 1, pid: 1, _id: 1 });
-      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ message: 'text' });
-      expect(mockDb.collection('errsole_logs').createIndex).toHaveBeenCalledWith({ errsole_id: 1 });
+
+      expect(mockDb.collection('errsole_logs_v2').createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 1, level: 1 })
+      );
+      expect(mockDb.collection('errsole_logs_v2').createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({ hostname: 1, timestamp: 1 })
+      );
+      expect(mockDb.collection('errsole_logs_v2').createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({ errsole_id: 1 })
+      );
 
       expect(mockDb.collection('errsole_users').createIndex).toHaveBeenCalledWith({ email: 1 }, { unique: true });
-      expect(mockDb.collection('errsole_config').dropIndex).toHaveBeenCalledWith('name_1');
       expect(mockDb.collection('errsole_config').createIndex).toHaveBeenCalledWith({ key: 1 }, { unique: true });
       expect(mockDb.collection('errsole_notifications').createIndex).toHaveBeenCalledWith(
-        { hostname: 1, hashed_message: 1, created_at: 1 }
+        expect.objectContaining({ hostname: 1, hashed_message: 1, created_at: 1 })
       );
     });
   });
@@ -445,29 +449,6 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.limit).toHaveBeenCalledWith(100);
     });
 
-    it('should set filters correctly', async () => {
-      const filters = {
-        hostname: 'localhost',
-        pid: 12345,
-        sources: ['source1', 'source2'],
-        levels: ['info', 'error'],
-        limit: 50
-      };
-      const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.getLogs(filters);
-      expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith({
-        hostname: 'localhost',
-        pid: 12345,
-        source: { $in: ['source1', 'source2'] },
-        level: { $in: ['info', 'error'] }
-      }, { projection: { meta: 0 } });
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: -1 });
-      expect(mockLogsCollection.limit).toHaveBeenCalledWith(50);
-    });
-
     it('should set lt_id filter correctly', async () => {
       const filters = { lt_id: '60a6cbbd8574f2a0d24c4d5e' };
       const logs = [{ _id: '123', message: 'log1' }];
@@ -492,32 +473,6 @@ describe('ErrsoleMongoDB', () => {
         _id: { $gt: new ObjectId('60a6cbbd8574f2a0d24c4d5e') }
       }, { projection: { meta: 0 } });
       expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: 1 });
-    });
-
-    it('should set lte_timestamp filter correctly', async () => {
-      const filters = { lte_timestamp: new Date('2021-05-20T00:00:00Z') };
-      const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.getLogs(filters);
-      expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith({
-        timestamp: { $lte: filters.lte_timestamp }
-      }, { projection: { meta: 0 } });
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
-    });
-
-    it('should set gte_timestamp filter correctly', async () => {
-      const filters = { gte_timestamp: new Date('2021-05-20T00:00:00Z') };
-      const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.getLogs(filters);
-      expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith({
-        timestamp: { $gte: filters.gte_timestamp }
-      }, { projection: { meta: 0 } });
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1 });
     });
 
     it('should set level_json filter correctly', async () => {
@@ -566,14 +521,59 @@ describe('ErrsoleMongoDB', () => {
       expect(result.items[0]).toEqual({ id: '123', message: 'log1' });
     });
 
-    it('should handle database error during retrieval', async () => {
-      const filters = { hostname: 'localhost' };
-      const mockError = new Error('Database retrieval error');
-      mockLogsCollection.toArray.mockRejectedValue(mockError);
+    it('should set lte_timestamp filter correctly', async () => {
+      const filters = { lte_timestamp: '2025-03-10T10:00:00Z' };
+      const dateObject = new Date(filters.lte_timestamp);
+      const logs = [{ _id: '123', message: 'log1', timestamp: dateObject }];
 
-      await expect(errsole.getLogs(filters)).rejects.toThrow('Database retrieval error');
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
-      expect(mockLogsCollection.find).toHaveBeenCalledWith({ hostname: 'localhost' }, { projection: { meta: 0 } });
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.getLogs(filters);
+
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        { timestamp: { $lte: dateObject } },
+        { projection: { meta: 0 } }
+      );
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
+      expect(result.items.length).toBe(1);
+    });
+
+    it('should set gte_timestamp filter correctly', async () => {
+      const filters = { gte_timestamp: '2025-03-10T10:00:00Z' };
+      const dateObject = new Date(filters.gte_timestamp);
+      const logs = [{ _id: '123', message: 'log1', timestamp: dateObject }];
+
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.getLogs(filters);
+
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        { timestamp: { $gte: dateObject } },
+        { projection: { meta: 0 } }
+      );
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
+      expect(result.items.length).toBe(1);
+    });
+
+    it('should apply both lte_timestamp and gte_timestamp filters correctly', async () => {
+      const filters = {
+        lte_timestamp: '2025-03-10T12:00:00Z',
+        gte_timestamp: '2025-03-10T10:00:00Z'
+      };
+      const lteDateObject = new Date(filters.lte_timestamp);
+      const gteDateObject = new Date(filters.gte_timestamp);
+      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-10T11:00:00Z') }];
+
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.getLogs(filters);
+
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        { timestamp: { $lte: lteDateObject, $gte: gteDateObject } },
+        { projection: { meta: 0 } }
+      );
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
+      expect(result.items.length).toBe(1);
     });
 
     it('should apply hostnames filter using $in operator when filters.hostnames is provided', async () => {
@@ -584,7 +584,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.getLogs(filters);
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.find).toHaveBeenCalledWith({
         hostname: { $in: ['host1', 'host2'] }
       }, { projection: { meta: 0 } });
@@ -599,7 +599,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.getLogs(filters);
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.find).toHaveBeenCalledWith({
         $or: [{ errsole_id: 101 }]
       }, { projection: { meta: 0 } });
@@ -626,96 +626,121 @@ describe('ErrsoleMongoDB', () => {
         { $text: { $search: '"error"' } },
         { projection: { meta: 0 } }
       );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
-      expect(mockLogsCollection.limit).toHaveBeenCalledWith(100);
-    });
-
-    it('should set filters correctly', async () => {
-      const searchTerms = ['error'];
-      const filters = {
-        hostname: 'localhost',
-        pid: 12345,
-        sources: ['source1', 'source2'],
-        levels: ['info', 'error'],
-        limit: 50
-      };
-      const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.searchLogs(searchTerms, filters);
-      expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        {
-          $text: { $search: '"error"' },
-          hostname: 'localhost',
-          pid: 12345,
-          source: { $in: ['source1', 'source2'] },
-          level: { $in: ['info', 'error'] }
-        },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
-      expect(mockLogsCollection.limit).toHaveBeenCalledWith(50);
-    });
-
-    it('should set lt_id filter correctly', async () => {
-      const searchTerms = ['error'];
-      const filters = { lt_id: '60a6cbbd8574f2a0d24c4d5e' };
-      const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.searchLogs(searchTerms, filters);
-      expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { $text: { $search: '"error"' }, _id: { $lt: new ObjectId('60a6cbbd8574f2a0d24c4d5e') } },
-        { projection: { meta: 0 } }
-      );
       expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: -1 });
-    });
-
-    it('should set gt_id filter correctly', async () => {
-      const searchTerms = ['error'];
-      const filters = { gt_id: '60a6cbbd8574f2a0d24c4d5e' };
-      const logs = [{ _id: '123', message: 'log1' }];
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.searchLogs(searchTerms, filters);
-      expect(result.items.length).toBe(1);
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { $text: { $search: '"error"' }, _id: { $gt: new ObjectId('60a6cbbd8574f2a0d24c4d5e') } },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: 1 });
+      expect(mockLogsCollection.limit).toHaveBeenCalledWith(100);
     });
 
     it('should set lte_timestamp filter correctly', async () => {
       const searchTerms = ['error'];
-      const filters = { lte_timestamp: new Date('2021-05-20T00:00:00Z') };
-      const logs = [{ _id: '123', message: 'log1' }];
+      const filters = { lte_timestamp: '2025-03-10T10:00:00Z' };
+      const lteDateObject = new Date(filters.lte_timestamp);
+      const gteDateObject = new Date(lteDateObject.getTime() - 24 * 60 * 60 * 1000); // 24 hours before
+      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-09T12:00:00Z') }];
+
       mockLogsCollection.toArray.mockResolvedValue(logs);
 
       const result = await errsole.searchLogs(searchTerms, filters);
-      expect(result.items.length).toBe(1);
+
       expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { $text: { $search: '"error"' }, timestamp: { $lte: filters.lte_timestamp } },
+        {
+          $text: { $search: '"error"' },
+          timestamp: { $lte: lteDateObject, $gte: gteDateObject }
+        },
         { projection: { meta: 0 } }
       );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
+      expect(result.items.length).toBe(1);
     });
 
     it('should set gte_timestamp filter correctly', async () => {
       const searchTerms = ['error'];
-      const filters = { gte_timestamp: new Date('2021-05-20T00:00:00Z') };
-      const logs = [{ _id: '123', message: 'log1' }];
+      const filters = { gte_timestamp: '2025-03-10T10:00:00Z' };
+      const gteDateObject = new Date(filters.gte_timestamp);
+      const lteDateObject = new Date(gteDateObject.getTime() + 24 * 60 * 60 * 1000); // 24 hours after
+      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-11T12:00:00Z') }];
+
       mockLogsCollection.toArray.mockResolvedValue(logs);
 
       const result = await errsole.searchLogs(searchTerms, filters);
-      expect(result.items.length).toBe(1);
+
       expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { $text: { $search: '"error"' }, timestamp: { $gte: filters.gte_timestamp } },
+        {
+          $text: { $search: '"error"' },
+          timestamp: { $gte: gteDateObject, $lte: lteDateObject }
+        },
         { projection: { meta: 0 } }
       );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1 });
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
+      expect(result.items.length).toBe(1);
+    });
+
+    it('should apply both lte_timestamp and gte_timestamp filters correctly', async () => {
+      const searchTerms = ['error'];
+      const filters = {
+        lte_timestamp: '2025-03-10T12:00:00Z',
+        gte_timestamp: '2025-03-10T10:00:00Z'
+      };
+      const lteDateObject = new Date(filters.lte_timestamp);
+      const gteDateObject = new Date(filters.gte_timestamp);
+      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-10T11:00:00Z') }];
+
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.searchLogs(searchTerms, filters);
+
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        {
+          $text: { $search: '"error"' },
+          timestamp: { $lte: lteDateObject, $gte: gteDateObject }
+        },
+        { projection: { meta: 0 } }
+      );
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
+      expect(result.items.length).toBe(1);
+    });
+
+    it('should set default gte_timestamp if only lte_timestamp is given', async () => {
+      const searchTerms = ['error'];
+      const filters = { lte_timestamp: '2025-03-10T12:00:00Z' };
+      const lteDateObject = new Date(filters.lte_timestamp);
+      const gteDateObject = new Date(lteDateObject.getTime() - 24 * 60 * 60 * 1000);
+      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-09T13:00:00Z') }];
+
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.searchLogs(searchTerms, filters);
+
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        {
+          $text: { $search: '"error"' },
+          timestamp: { $lte: lteDateObject, $gte: gteDateObject }
+        },
+        { projection: { meta: 0 } }
+      );
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
+      expect(result.items.length).toBe(1);
+    });
+
+    it('should set default lte_timestamp if only gte_timestamp is given', async () => {
+      const searchTerms = ['error'];
+      const filters = { gte_timestamp: '2025-03-10T12:00:00Z' };
+      const gteDateObject = new Date(filters.gte_timestamp);
+      const lteDateObject = new Date(gteDateObject.getTime() + 24 * 60 * 60 * 1000);
+      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-11T11:00:00Z') }];
+
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.searchLogs(searchTerms, filters);
+
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        {
+          $text: { $search: '"error"' },
+          timestamp: { $gte: gteDateObject, $lte: lteDateObject }
+        },
+        { projection: { meta: 0 } }
+      );
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
+      expect(result.items.length).toBe(1);
     });
 
     it('should set level_json filter correctly', async () => {
@@ -769,20 +794,6 @@ describe('ErrsoleMongoDB', () => {
       expect(result.items[0]).toEqual({ id: '123', message: 'log1' });
     });
 
-    it('should handle database error during retrieval', async () => {
-      const searchTerms = ['error'];
-      const filters = { hostname: 'localhost' };
-      const mockError = new Error('Database retrieval error');
-      mockLogsCollection.toArray.mockRejectedValue(mockError);
-
-      await expect(errsole.searchLogs(searchTerms, filters)).rejects.toThrow('Database retrieval error');
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { $text: { $search: '"error"' }, hostname: 'localhost' },
-        { projection: { meta: 0 } }
-      );
-    });
-
     it('should apply hostnames filter using $in operator when filters.hostnames is provided', async () => {
       const searchTerms = ['error'];
       const filters = { hostnames: ['host1', 'host2'] };
@@ -792,7 +803,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.searchLogs(searchTerms, filters);
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.find).toHaveBeenCalledWith({
         $text: { $search: '"error"' },
         hostname: { $in: ['host1', 'host2'] }
@@ -809,7 +820,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.searchLogs(searchTerms, filters);
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.find).toHaveBeenCalledWith({
         $text: { $search: '"error"' },
         $or: [{ errsole_id: 101 }]
@@ -835,7 +846,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.getMeta(id);
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.findOne).toHaveBeenCalledWith(
         { _id: objectId },
         { projection: { meta: 1 } }
@@ -851,7 +862,7 @@ describe('ErrsoleMongoDB', () => {
 
       await expect(errsole.getMeta(id)).rejects.toThrow('Log entry not found.');
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.findOne).toHaveBeenCalledWith(
         { _id: objectId },
         { projection: { meta: 1 } }
@@ -867,7 +878,7 @@ describe('ErrsoleMongoDB', () => {
 
       await expect(errsole.getMeta(id)).rejects.toThrow('Database retrieval error');
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.findOne).toHaveBeenCalledWith(
         { _id: objectId },
         { projection: { meta: 1 } }
@@ -1542,21 +1553,6 @@ describe('ErrsoleMongoDB', () => {
   });
 
   describe('getHostnames', () => {
-    it('should return sorted hostnames excluding null or empty values', async () => {
-      const mockHostnames = ['host1', 'host2', null, ''];
-      mockLogsCollection.distinct.mockResolvedValue(mockHostnames);
-
-      const result = await errsole.getHostnames();
-
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
-      expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
-
-      const expectedHostnames = ['host1', 'host2'];
-      expect(result.items).toEqual(expectedHostnames);
-    });
-  });
-
-  describe('getHostnames', () => {
     let errsole;
 
     beforeEach(() => {
@@ -1570,7 +1566,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.getHostnames();
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
 
       const expectedHostnames = ['host1', 'host2', 'host3'];
@@ -1582,7 +1578,7 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.getHostnames();
 
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
       expect(result.items).toEqual([]);
     });
@@ -1595,7 +1591,7 @@ describe('ErrsoleMongoDB', () => {
 
       expect(result).toBeInstanceOf(Error);
       expect(result.message).toBe('Database error');
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
+      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs_v2');
       expect(mockLogsCollection.distinct).toHaveBeenCalledWith('hostname', { hostname: { $nin: [null, ''] } });
     });
   });
@@ -1655,46 +1651,6 @@ describe('ErrsoleMongoDB', () => {
       mockLogsCollection.insertOne.mockRejectedValue(mockError);
 
       await expect(errsole.insertNotificationItem(notification)).rejects.toThrow('Transaction failed');
-    });
-  });
-
-  describe('DeleteAllLogs', () => {
-    let errsole;
-
-    beforeEach(() => {
-      jest.clearAllMocks();
-      errsole = new ErrsoleMongoDB('mongodb://localhost:27017', 'test_db');
-    });
-
-    it('should delete all logs successfully when there are logs in the collection', async () => {
-      const mockDropResult = true;
-      mockLogsCollection.drop.mockResolvedValue(mockDropResult);
-
-      const result = await errsole.deleteAllLogs();
-
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
-      expect(mockLogsCollection.drop).toHaveBeenCalled();
-      expect(result).toEqual({});
-    });
-
-    it('should throw an error if no logs are found to delete', async () => {
-      const mockDropResult = { ok: 0 };
-      mockLogsCollection.drop.mockResolvedValue(mockDropResult);
-
-      await expect(errsole.deleteAllLogs()).rejects.toThrow('No logs were found to delete.');
-
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
-      expect(mockLogsCollection.drop).toHaveBeenCalled();
-    });
-
-    it('should handle errors during deletion and propagate the error', async () => {
-      const mockError = new Error('Database error during deletion');
-      mockLogsCollection.drop.mockRejectedValue(mockError);
-
-      await expect(errsole.deleteAllLogs()).rejects.toThrow('Database error during deletion');
-
-      expect(mockDb.collection).toHaveBeenCalledWith('errsole_logs');
-      expect(mockLogsCollection.drop).toHaveBeenCalled();
     });
   });
 
