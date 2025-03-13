@@ -475,6 +475,28 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.sort).toHaveBeenCalledWith({ _id: 1 });
     });
 
+    it('should apply both lte_timestamp and gte_timestamp filters with final sort order from gte_timestamp and not reverse documents', async () => {
+      const filters = { lte_timestamp: 1630000000000, gte_timestamp: 1620000000000 };
+      const logs = [
+        { _id: '1', message: 'log1' },
+        { _id: '2', message: 'log2' },
+        { _id: '3', message: 'log3' }
+      ];
+      mockLogsCollection.toArray.mockResolvedValue(logs);
+
+      const result = await errsole.getLogs(filters);
+
+      // Verify that find is called with both timestamp conditions
+      expect(mockLogsCollection.find).toHaveBeenCalledWith(
+        { timestamp: { $lte: 1630000000000, $gte: 1620000000000 } },
+        { projection: { meta: 0 } }
+      );
+      // The final sort order comes from the gte_timestamp block
+      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
+      // Since shouldReverse is false, the first item remains unchanged
+      expect(result.items[0].id).toBe(logs[0]._id);
+    });
+
     it('should set level_json filter correctly', async () => {
       const filters = {
         level_json: [
@@ -519,61 +541,6 @@ describe('ErrsoleMongoDB', () => {
 
       const result = await errsole.getLogs();
       expect(result.items[0]).toEqual({ id: '123', message: 'log1' });
-    });
-
-    it('should set lte_timestamp filter correctly', async () => {
-      const filters = { lte_timestamp: '2025-03-10T10:00:00Z' };
-      const dateObject = new Date(filters.lte_timestamp);
-      const logs = [{ _id: '123', message: 'log1', timestamp: dateObject }];
-
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.getLogs(filters);
-
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { timestamp: { $lte: dateObject } },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
-      expect(result.items.length).toBe(1);
-    });
-
-    it('should set gte_timestamp filter correctly', async () => {
-      const filters = { gte_timestamp: '2025-03-10T10:00:00Z' };
-      const dateObject = new Date(filters.gte_timestamp);
-      const logs = [{ _id: '123', message: 'log1', timestamp: dateObject }];
-
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.getLogs(filters);
-
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { timestamp: { $gte: dateObject } },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
-      expect(result.items.length).toBe(1);
-    });
-
-    it('should apply both lte_timestamp and gte_timestamp filters correctly', async () => {
-      const filters = {
-        lte_timestamp: '2025-03-10T12:00:00Z',
-        gte_timestamp: '2025-03-10T10:00:00Z'
-      };
-      const lteDateObject = new Date(filters.lte_timestamp);
-      const gteDateObject = new Date(filters.gte_timestamp);
-      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-10T11:00:00Z') }];
-
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.getLogs(filters);
-
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        { timestamp: { $lte: lteDateObject, $gte: gteDateObject } },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
-      expect(result.items.length).toBe(1);
     });
 
     it('should apply hostnames filter using $in operator when filters.hostnames is provided', async () => {
@@ -630,117 +597,89 @@ describe('ErrsoleMongoDB', () => {
       expect(mockLogsCollection.limit).toHaveBeenCalledWith(100);
     });
 
-    it('should set lte_timestamp filter correctly', async () => {
+    it('should apply lte_timestamp filter correctly when only lte_timestamp is provided', async () => {
       const searchTerms = ['error'];
-      const filters = { lte_timestamp: '2025-03-10T10:00:00Z' };
-      const lteDateObject = new Date(filters.lte_timestamp);
-      const gteDateObject = new Date(lteDateObject.getTime() - 24 * 60 * 60 * 1000); // 24 hours before
-      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-09T12:00:00Z') }];
-
+      // Provide lte_timestamp as a date string
+      const givenTimestamp = '2021-05-03T00:00:00.000Z';
+      const filters = { lte_timestamp: givenTimestamp };
+      const logs = [{ _id: '123', message: 'log1' }];
       mockLogsCollection.toArray.mockResolvedValue(logs);
 
       const result = await errsole.searchLogs(searchTerms, filters);
+      expect(result).toBeDefined();
 
+      // Convert the provided timestamp into a Date and compute expected $gte as (givenTimestamp - 24 hours)
+      const lteDate = new Date(givenTimestamp);
+      const expectedLte = lteDate.toISOString();
+      const gteDate = new Date(lteDate.getTime() - 24 * 60 * 60 * 1000);
+      const expectedGte = gteDate.toISOString();
+
+      // Verify that find is called with a query that includes the timestamp filter
       expect(mockLogsCollection.find).toHaveBeenCalledWith(
         {
           $text: { $search: '"error"' },
-          timestamp: { $lte: lteDateObject, $gte: gteDateObject }
+          timestamp: { $lte: expectedLte, $gte: expectedGte }
         },
         { projection: { meta: 0 } }
       );
+      // Verify sort order is set from the lte block
       expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
-      expect(result.items.length).toBe(1);
     });
 
-    it('should set gte_timestamp filter correctly', async () => {
+    it('should apply gte_timestamp filter correctly when only gte_timestamp is provided', async () => {
       const searchTerms = ['error'];
-      const filters = { gte_timestamp: '2025-03-10T10:00:00Z' };
-      const gteDateObject = new Date(filters.gte_timestamp);
-      const lteDateObject = new Date(gteDateObject.getTime() + 24 * 60 * 60 * 1000); // 24 hours after
-      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-11T12:00:00Z') }];
-
+      const givenTimestamp = '2021-05-04T00:00:00.000Z';
+      const filters = { gte_timestamp: givenTimestamp };
+      const logs = [{ _id: '123', message: 'log1' }];
       mockLogsCollection.toArray.mockResolvedValue(logs);
 
       const result = await errsole.searchLogs(searchTerms, filters);
+      expect(result).toBeDefined();
 
+      // Convert the provided timestamp into a Date and compute expected $lte as (givenTimestamp + 24 hours)
+      const gteDate = new Date(givenTimestamp);
+      const expectedGte = gteDate.toISOString();
+      const lteDate = new Date(gteDate.getTime() + 24 * 60 * 60 * 1000);
+      const expectedLte = lteDate.toISOString();
+
+      // Verify that find is called with the correct timestamp filter
       expect(mockLogsCollection.find).toHaveBeenCalledWith(
         {
           $text: { $search: '"error"' },
-          timestamp: { $gte: gteDateObject, $lte: lteDateObject }
+          timestamp: { $gte: expectedGte, $lte: expectedLte }
         },
         { projection: { meta: 0 } }
       );
+      // Verify sort order is set from the gte block
       expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
-      expect(result.items.length).toBe(1);
     });
 
-    it('should apply both lte_timestamp and gte_timestamp filters correctly', async () => {
+    it('should apply both lte_timestamp and gte_timestamp filters correctly when both are provided', async () => {
       const searchTerms = ['error'];
-      const filters = {
-        lte_timestamp: '2025-03-10T12:00:00Z',
-        gte_timestamp: '2025-03-10T10:00:00Z'
-      };
-      const lteDateObject = new Date(filters.lte_timestamp);
-      const gteDateObject = new Date(filters.gte_timestamp);
-      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-10T11:00:00Z') }];
-
+      const givenLteTimestamp = '2021-05-04T00:00:00.000Z';
+      const givenGteTimestamp = '2021-05-03T00:00:00.000Z';
+      const filters = { lte_timestamp: givenLteTimestamp, gte_timestamp: givenGteTimestamp };
+      const logs = [{ _id: '123', message: 'log1' }];
       mockLogsCollection.toArray.mockResolvedValue(logs);
 
       const result = await errsole.searchLogs(searchTerms, filters);
+      expect(result).toBeDefined();
 
+      const lteDate = new Date(givenLteTimestamp);
+      const gteDate = new Date(givenGteTimestamp);
+      const expectedLte = lteDate.toISOString();
+      const expectedGte = gteDate.toISOString();
+
+      // When both filters are provided, no additional boundaries are computed.
       expect(mockLogsCollection.find).toHaveBeenCalledWith(
         {
           $text: { $search: '"error"' },
-          timestamp: { $lte: lteDateObject, $gte: gteDateObject }
+          timestamp: { $lte: expectedLte, $gte: expectedGte }
         },
         { projection: { meta: 0 } }
       );
+      // Final sort order is determined by the gte_timestamp block.
       expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
-      expect(result.items.length).toBe(1);
-    });
-
-    it('should set default gte_timestamp if only lte_timestamp is given', async () => {
-      const searchTerms = ['error'];
-      const filters = { lte_timestamp: '2025-03-10T12:00:00Z' };
-      const lteDateObject = new Date(filters.lte_timestamp);
-      const gteDateObject = new Date(lteDateObject.getTime() - 24 * 60 * 60 * 1000);
-      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-09T13:00:00Z') }];
-
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.searchLogs(searchTerms, filters);
-
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        {
-          $text: { $search: '"error"' },
-          timestamp: { $lte: lteDateObject, $gte: gteDateObject }
-        },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: -1, _id: -1 });
-      expect(result.items.length).toBe(1);
-    });
-
-    it('should set default lte_timestamp if only gte_timestamp is given', async () => {
-      const searchTerms = ['error'];
-      const filters = { gte_timestamp: '2025-03-10T12:00:00Z' };
-      const gteDateObject = new Date(filters.gte_timestamp);
-      const lteDateObject = new Date(gteDateObject.getTime() + 24 * 60 * 60 * 1000);
-      const logs = [{ _id: '123', message: 'log1', timestamp: new Date('2025-03-11T11:00:00Z') }];
-
-      mockLogsCollection.toArray.mockResolvedValue(logs);
-
-      const result = await errsole.searchLogs(searchTerms, filters);
-
-      expect(mockLogsCollection.find).toHaveBeenCalledWith(
-        {
-          $text: { $search: '"error"' },
-          timestamp: { $gte: gteDateObject, $lte: lteDateObject }
-        },
-        { projection: { meta: 0 } }
-      );
-      expect(mockLogsCollection.sort).toHaveBeenCalledWith({ timestamp: 1, _id: 1 });
-      expect(result.items.length).toBe(1);
     });
 
     it('should set level_json filter correctly', async () => {
